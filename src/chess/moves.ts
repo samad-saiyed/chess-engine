@@ -3,6 +3,7 @@ import { isAttackedByKnight } from './attacked/knight'
 import { isAttackedByPawn } from './attacked/pawn'
 import { getBishopMoves } from './piece-moves/bishop'
 import { getCastlingMoves } from './piece-moves/castle'
+import { getEnPassantMoves } from './piece-moves/en-passant'
 import { getKingMoves } from './piece-moves/king'
 import { getKnightMoves } from './piece-moves/knight'
 import { getPawnMoves } from './piece-moves/pawn'
@@ -210,6 +211,7 @@ export function getLegalMoves(
   board: Board,
   from: SquareCoordinate,
   castlingRights: CastlingRights,
+  enPassantTarget: SquareCoordinate | null,
 ): SquareCoordinate[] {
   const piece = board[from.row][from.col]
 
@@ -221,16 +223,28 @@ export function getLegalMoves(
 
   let legalMoves = pseudoLegalMoves.filter((to) => {
     const nextBoard = makeMove(board, from, to)
+
     return !isKingInCheck(nextBoard, piece.color)
   })
-
-  console.log('castling moves:', getCastlingMoves(board, from, castlingRights))
 
   // Add castling moves for king
   if (piece.type === 'k') {
     const castlingMoves = getCastlingMoves(board, from, castlingRights)
 
     legalMoves = [...legalMoves, ...castlingMoves]
+  }
+
+  // Add en passant moves for pawn
+  if (piece.type === 'p') {
+    const enPassantMoves = getEnPassantMoves(board, from, enPassantTarget)
+
+    const legalEnPassantMoves = enPassantMoves.filter((to) => {
+      const nextBoard = makeEnPassantMove(board, from, to)
+
+      return !isKingInCheck(nextBoard, piece.color)
+    })
+
+    legalMoves = [...legalMoves, ...legalEnPassantMoves]
   }
 
   return legalMoves
@@ -240,13 +254,19 @@ export function hasAnyLegalMoves(
   board: Board,
   color: Color,
   castlingRights: CastlingRights,
+  enPassantTarget: SquareCoordinate | null,
 ): boolean {
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
       const piece = board[row][col]
 
       if (piece?.color === color) {
-        const legalMoves = getLegalMoves(board, { row, col }, castlingRights)
+        const legalMoves = getLegalMoves(
+          board,
+          { row, col },
+          castlingRights,
+          enPassantTarget,
+        )
 
         if (legalMoves.length > 0) {
           return true
@@ -261,10 +281,11 @@ export function isCheckmate(
   board: Board,
   color: Color,
   castlingRights: CastlingRights,
+  enPassantTarget: SquareCoordinate | null,
 ): boolean {
   return (
     isKingInCheck(board, color) &&
-    !hasAnyLegalMoves(board, color, castlingRights)
+    !hasAnyLegalMoves(board, color, castlingRights, enPassantTarget)
   )
 }
 
@@ -272,10 +293,11 @@ export function isStalemate(
   board: Board,
   color: Color,
   castlingRights: CastlingRights,
+  enPassantTarget: SquareCoordinate | null,
 ): boolean {
   return (
     !isKingInCheck(board, color) &&
-    !hasAnyLegalMoves(board, color, castlingRights)
+    !hasAnyLegalMoves(board, color, castlingRights, enPassantTarget)
   )
 }
 
@@ -283,12 +305,13 @@ export function getGameStatus(
   board: Board,
   color: Color,
   castlingRights: CastlingRights,
+  enPassantTarget: SquareCoordinate | null,
 ): GameStatus {
-  if (isCheckmate(board, color, castlingRights)) {
+  if (isCheckmate(board, color, castlingRights, enPassantTarget)) {
     return 'checkmate'
   }
 
-  if (isStalemate(board, color, castlingRights)) {
+  if (isStalemate(board, color, castlingRights, enPassantTarget)) {
     return 'stalemate'
   }
 
@@ -363,10 +386,8 @@ export function makeCastlingMove(
 
   //White
   if (from.row === 7 && from.col === 4) {
-    console.log('HERE ARRIVED')
     // Kingside
     if (to.col === 6) {
-      console.log('kingside')
       // King Moves
       nextBoard[7][6] = nextBoard[7][4]
       nextBoard[7][4] = null
@@ -449,6 +470,52 @@ export function makePromotionMove(
 
   nextBoard[to.row][to.col] = { ...piece, type: promotionPiece }
   nextBoard[from.row][from.col] = null
+
+  return nextBoard
+}
+
+export function getEnPassantTarget(
+  board: Board,
+  from: SquareCoordinate,
+  to: SquareCoordinate,
+): SquareCoordinate | null {
+  const piece = board[from.row][from.col]
+
+  if (!piece || piece.type !== 'p') {
+    return null
+  }
+
+  const rowDifference = Math.abs(to.row - from.row)
+
+  if (rowDifference !== 2) {
+    return null
+  }
+
+  return {
+    row: (from.row + to.row) / 2,
+    col: from.col,
+  }
+}
+
+export function makeEnPassantMove(
+  board: Board,
+  from: SquareCoordinate,
+  to: SquareCoordinate,
+): Board {
+  const nextBoard = board.map((row) => [...row])
+
+  const piece = nextBoard[from.row][from.col]
+
+  if (!piece) {
+    return board
+  }
+
+  // Move the pawn
+  nextBoard[to.row][to.col] = piece
+  nextBoard[from.row][from.col] = null
+
+  // Remove the captured pawn
+  nextBoard[from.row][to.col] = null
 
   return nextBoard
 }

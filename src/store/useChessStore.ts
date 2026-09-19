@@ -1,13 +1,17 @@
 import { createInitialBoard } from '@/chess/board'
 import {
+  getEnPassantTarget,
   getGameStatus,
   getLegalMoves,
   isPromotionMove,
   makeCastlingMove,
+  makeEnPassantMove,
   makeMove,
   makePromotionMove,
+  updateCastlingRights,
 } from '@/chess/moves'
 import { getCastlingMoves } from '@/chess/piece-moves/castle'
+import { getEnPassantMoves } from '@/chess/piece-moves/en-passant'
 import type {
   Board,
   CastlingRights,
@@ -33,10 +37,13 @@ interface ChessStore {
     from: SquareCoordinate
     to: SquareCoordinate
   } | null
+  enPassantTarget: SquareCoordinate | null
 
   // Actions
   setSelectedSquare: (square: SquareCoordinate | null) => void
   handleSquareClick: (row: number, col: number) => void
+  completePromotion: (promotionPiece: PieceType) => void
+  cancelPromotion: () => void
   resetGame: () => void
 }
 
@@ -53,8 +60,11 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     blackQueenSide: true,
   },
   pendingPromotion: null,
+  enPassantTarget: null,
 
   setSelectedSquare: (square) => set({ selectedSquare: square }),
+
+  cancelPromotion: () => set({ pendingPromotion: null }),
 
   resetGame: () =>
     set({
@@ -62,6 +72,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       turn: 'white',
       status: 'playing',
       selectedSquare: null,
+      pendingPromotion: null,
       moveHistory: [],
       castlingRights: {
         whiteKingSide: true,
@@ -69,6 +80,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
         blackKingSide: true,
         blackQueenSide: true,
       },
+      enPassantTarget: null,
     }),
 
   handleSquareClick: (row, col) => {
@@ -80,6 +92,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moveHistory,
       resetGame,
       castlingRights,
+      enPassantTarget,
     } = get()
 
     if (status === 'checkmate' || status === 'stalemate') {
@@ -111,12 +124,33 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     }
 
     // Check whether the clicked square is a valid destination
-    const validMoves = getLegalMoves(board, selectedSquare, castlingRights)
+    const validMoves = getLegalMoves(
+      board,
+      selectedSquare,
+      castlingRights,
+      enPassantTarget,
+    )
     const canMove = validMoves.some(
       (move) => move.row === row && move.col === col,
     )
 
+    if (!canMove) {
+      set({ selectedSquare: null })
+      return
+    }
+
     const isPromotion = isPromotionMove(board, selectedSquare, { row, col })
+
+    if (isPromotion) {
+      set({
+        pendingPromotion: {
+          from: selectedSquare,
+          to: { row, col },
+        },
+        selectedSquare: null,
+      })
+      return
+    }
 
     const castlingMoves = getCastlingMoves(
       board,
@@ -128,37 +162,34 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       (move) => move.row === row && move.col === col,
     )
 
-    if (!canMove) {
-      set({ selectedSquare: null })
-      return
-    }
-
     const piece = board[selectedSquare.row][selectedSquare.col]
 
     if (!piece) {
       return
     }
 
-    const capturedPiece = board[row][col]
+    const enPassantMoves =
+      piece.type === 'p'
+        ? getEnPassantMoves(board, selectedSquare, enPassantTarget)
+        : []
+
+    const isEnPassant = enPassantMoves.some(
+      (move) => move.row === row && move.col === col,
+    )
+
+    const capturedPiece = isEnPassant
+      ? board[selectedSquare.row][col]
+      : board[row][col]
 
     let nextBoard: Board
     let moveType: MoveType = 'normal'
-    let promotionPiece: PieceType | undefined
 
-    if (isPromotion) {
-      promotionPiece = 'q' // temporary
-      moveType = 'promotion'
-
-      nextBoard = makePromotionMove(
-        board,
-        selectedSquare,
-        { row, col },
-        promotionPiece,
-      )
-    } else if (isCastlingMove) {
+    if (isCastlingMove) {
       moveType = 'castle'
-
       nextBoard = makeCastlingMove(board, selectedSquare, { row, col })
+    } else if (isEnPassant) {
+      moveType = 'en-passant'
+      nextBoard = makeEnPassantMove(board, selectedSquare, { row, col })
     } else {
       nextBoard = makeMove(board, selectedSquare, { row, col })
     }
@@ -169,11 +200,102 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       piece,
       capturedPiece,
       type: moveType,
+    }
+
+    const nextCastlingRights = updateCastlingRights(castlingRights, move)
+    const nextTurn = turn === 'white' ? 'black' : 'white'
+    const nextStatus = getGameStatus(
+      nextBoard,
+      nextTurn,
+      nextCastlingRights,
+      enPassantTarget,
+    )
+
+    if (nextStatus === 'checkmate') {
+      gooeyToast.success('Checkmate', {
+        description: `${capitalize(turn)} wins!`,
+        action: {
+          label: 'Restart?',
+          onClick: () => {
+            gooeyToast.dismiss()
+            resetGame()
+          },
+        },
+        showTimestamp: false,
+      })
+    }
+
+    if (nextStatus === 'stalemate') {
+      gooeyToast.success('Stalemate!', {
+        description: 'Your match resulted in a DRAW!',
+        action: {
+          label: 'Restart?',
+          onClick: () => {
+            gooeyToast.dismiss()
+            resetGame()
+          },
+        },
+        showTimestamp: false,
+      })
+    }
+
+    const nextEnPassantTarget = getEnPassantTarget(board, selectedSquare, {
+      row,
+      col,
+    })
+
+    set({
+      board: nextBoard,
+      turn: nextTurn,
+      status: nextStatus,
+      moveHistory: [...moveHistory, move],
+      castlingRights: nextCastlingRights,
+      selectedSquare: null,
+      enPassantTarget: nextEnPassantTarget,
+    })
+  },
+
+  completePromotion: (promotionPiece: PieceType) => {
+    const {
+      board,
+      turn,
+      pendingPromotion,
+      moveHistory,
+      resetGame,
+      castlingRights,
+      enPassantTarget,
+    } = get()
+
+    if (!pendingPromotion) {
+      return
+    }
+
+    const { from, to } = pendingPromotion
+    const piece = board[from.row][from.col]
+    if (!piece) {
+      return
+    }
+
+    const capturedPiece = board[to.row][to.col]
+    const nextBoard = makePromotionMove(board, from, to, promotionPiece)
+
+    const move: Move = {
+      from,
+      to,
+      piece,
+      capturedPiece,
+      type: 'promotion',
       promotionPiece,
     }
 
+    const nextCastlingRights = updateCastlingRights(castlingRights, move)
     const nextTurn = turn === 'white' ? 'black' : 'white'
-    const nextStatus = getGameStatus(nextBoard, nextTurn, castlingRights)
+    const nextStatus = getGameStatus(
+      nextBoard,
+      nextTurn,
+      nextCastlingRights,
+      enPassantTarget,
+    )
 
     if (nextStatus === 'checkmate') {
       gooeyToast.success('Checkmate', {
@@ -208,7 +330,10 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       turn: nextTurn,
       status: nextStatus,
       moveHistory: [...moveHistory, move],
+      castlingRights: nextCastlingRights,
       selectedSquare: null,
+      pendingPromotion: null,
+      enPassantTarget: null,
     })
   },
 }))

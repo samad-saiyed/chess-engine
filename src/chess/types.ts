@@ -30,14 +30,6 @@ export type Move = {
   promotionPiece?: PieceType
 }
 
-export type GameState = {
-  board: Board
-  turn: Color
-  status: GameStatus
-  moveHistory: Move[]
-  castlingRights: CastlingRights
-}
-
 export type CastlingRights = {
   whiteKingSide: boolean
   whiteQueenSide: boolean
