@@ -1,0 +1,42 @@
+{
+  "name": "Chess Engine",
+  "short_name": "Chess",
+  "description": "A simple Next.js JavaScript-based chess engine.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#10352A",
+  "theme_color": "#176E55",
+  "icons": [
+    {
+      "src": "/icons/android/mipmap-mdpi/ic_launcher.webp",
+      "sizes": "48x48",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icons/android/mipmap-hdpi/ic_launcher.webp",
+      "sizes": "72x72",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icons/android/mipmap-xhdpi/ic_launcher.webp",
+      "sizes": "96x96",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icons/android/mipmap-xxhdpi/ic_launcher.webp",
+      "sizes": "144x144",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icons/android/mipmap-xxxhdpi/ic_launcher.webp",
+      "sizes": "192x192",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icons/android/ic_launcher-web.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
