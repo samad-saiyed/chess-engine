@@ -2,8 +2,10 @@ import { createInitialBoard } from '@/chess/board'
 import {
   getGameStatus,
   getLegalMoves,
+  isPromotionMove,
   makeCastlingMove,
   makeMove,
+  makePromotionMove,
 } from '@/chess/moves'
 import { getCastlingMoves } from '@/chess/piece-moves/castle'
 import type {
@@ -12,6 +14,8 @@ import type {
   Color,
   GameStatus,
   Move,
+  MoveType,
+  PieceType,
   SquareCoordinate,
 } from '@/chess/types'
 import { gooeyToast } from 'goey-toast'
@@ -25,6 +29,10 @@ interface ChessStore {
   moveHistory: Move[]
   selectedSquare: SquareCoordinate | null
   castlingRights: CastlingRights
+  pendingPromotion: {
+    from: SquareCoordinate
+    to: SquareCoordinate
+  } | null
 
   // Actions
   setSelectedSquare: (square: SquareCoordinate | null) => void
@@ -44,6 +52,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     blackKingSide: true,
     blackQueenSide: true,
   },
+  pendingPromotion: null,
 
   setSelectedSquare: (square) => set({ selectedSquare: square }),
 
@@ -107,6 +116,8 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       (move) => move.row === row && move.col === col,
     )
 
+    const isPromotion = isPromotionMove(board, selectedSquare, { row, col })
+
     const castlingMoves = getCastlingMoves(
       board,
       selectedSquare,
@@ -130,17 +141,36 @@ export const useChessStore = create<ChessStore>((set, get) => ({
 
     const capturedPiece = board[row][col]
 
+    let nextBoard: Board
+    let moveType: MoveType = 'normal'
+    let promotionPiece: PieceType | undefined
+
+    if (isPromotion) {
+      promotionPiece = 'q' // temporary
+      moveType = 'promotion'
+
+      nextBoard = makePromotionMove(
+        board,
+        selectedSquare,
+        { row, col },
+        promotionPiece,
+      )
+    } else if (isCastlingMove) {
+      moveType = 'castle'
+
+      nextBoard = makeCastlingMove(board, selectedSquare, { row, col })
+    } else {
+      nextBoard = makeMove(board, selectedSquare, { row, col })
+    }
+
     const move: Move = {
       from: selectedSquare,
       to: { row, col },
       piece,
       capturedPiece,
-      type: isCastlingMove ? 'castle' : 'normal',
+      type: moveType,
+      promotionPiece,
     }
-
-    const nextBoard = isCastlingMove
-      ? makeCastlingMove(board, selectedSquare, { row, col })
-      : makeMove(board, selectedSquare, { row, col })
 
     const nextTurn = turn === 'white' ? 'black' : 'white'
     const nextStatus = getGameStatus(nextBoard, nextTurn, castlingRights)

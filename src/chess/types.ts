@@ -27,6 +27,7 @@ export type Move = {
   piece: Piece
   capturedPiece: Piece | null
   type: MoveType
+  promotionPiece?: PieceType
 }
 
 export type GameState = {

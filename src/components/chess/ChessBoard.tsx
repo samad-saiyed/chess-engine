@@ -25,7 +25,7 @@ export function ChessBoard() {
 
   return (
     <div className='w-full max-w-160'>
-      <div className='grid grid-cols-8 overflow-hidden rounded-lg shadow-xl'>
+      <div className='grid grid-cols-8 overflow-hidden rounded-lg shadow-2xl'>
         {board.map((row, rowIndex) =>
           row.map((piece, colIndex) => {
             const isLight = (rowIndex + colIndex) % 2 === 0

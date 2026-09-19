@@ -13,7 +13,7 @@ export function ChessPiece({ piece }: ChessPieceProps) {
       src={`/pieces/${piece.color.toLowerCase().at(0)}${piece.type.toUpperCase()}.svg`}
       alt={`${piece.color} ${piece.type}`}
       loading='eager'
-      className='pointer-events-none h-[80%] max-h-15 w-[80%] max-w-15 object-contain select-none'
+      className='pointer-events-none h-[90%] max-h-20 w-[90%] max-w-20 object-contain select-none'
     />
   )
 }

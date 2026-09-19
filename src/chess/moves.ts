@@ -415,3 +415,40 @@ export function makeCastlingMove(
 
   return nextBoard
 }
+
+export function isPromotionMove(
+  board: Board,
+  from: SquareCoordinate,
+  to: SquareCoordinate,
+): boolean {
+  const piece = board[from.row][from.col]
+
+  if (!piece || piece.type !== 'p') {
+    return false
+  }
+  if (piece.color === 'white') {
+    return to.row === 0
+  }
+
+  return to.row === 7
+}
+
+export function makePromotionMove(
+  board: Board,
+  from: SquareCoordinate,
+  to: SquareCoordinate,
+  promotionPiece: PieceType,
+): Board {
+  const nextBoard = board.map((row) => [...row])
+
+  const piece = nextBoard[from.row][from.col]
+
+  if (!piece) {
+    return board
+  }
+
+  nextBoard[to.row][to.col] = { ...piece, type: promotionPiece }
+  nextBoard[from.row][from.col] = null
+
+  return nextBoard
+}

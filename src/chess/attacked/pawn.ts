@@ -8,10 +8,6 @@ export function isAttackedByPawn(
 ) {
   const pawnRow = square.row + (byColor === 'white' ? 1 : -1)
 
-  if (!isInsideBoard(pawnRow, square.col - 1)) {
-    return false
-  }
-
   const pawnColLeft = square.col - 1
   const pawnColRight = square.col + 1
 
