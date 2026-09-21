@@ -24,14 +24,14 @@
 
 **ChessEngine** is an open-source, client-side chess application designed to run entirely in the browser without relying on external chess engines or backend server APIs.
 
-Featuring a custom-built rule validation engine, a multi-level Minimax AI engine with Alpha-Beta pruning offloaded to Web Workers, and direct peer-to-peer WebRTC gaming, ChessEngine delivers a zero-latency, zero-cost chess experience.
+Featuring a custom-built rule validation engine, a multi-difficulty chess engine offloaded to Web Workers, and direct peer-to-peer WebRTC gaming, ChessEngine delivers a zero-latency, zero-cost chess experience.
 
 ---
 
 ## ✨ Key Features
 
 - **♟️ Custom In-House Chess Engine**: Full implementation of standard chess logic from scratch, including castling, en passant, pawn promotion, check, checkmate, stalemate, and draw conditions.
-- **🧠 Computer Opponent (AI)**: Multi-difficulty engine powered by Minimax, Alpha-Beta Pruning, Transposition Tables, and Quiescence Search.
+- **🤖 Computer Opponent (Bot)**: 3 difficulty levels (Casual, Intermediate, Master) with material and positional evaluation.
 - **⚡ Non-Blocking Performance**: Engine search logic executes inside a dedicated **Web Worker**, ensuring 60fps UI responsiveness during deep position evaluation.
 - **🤝 Serverless Peer-to-Peer Multiplayer**: Play with friends via **WebRTC DataChannels** directly between browsers—no central server required.
 - **👥 Local 2-Player Mode**: Play head-to-head on the same device with move highlights and state tracking.

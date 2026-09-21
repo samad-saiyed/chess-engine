@@ -1,8 +1,8 @@
-import type { Metadata } from 'next'
 import { Geist_Mono, Inter } from 'next/font/google'
 
 import { ToastWrapper } from '@/components/wrapper/toast'
 import 'goey-toast/styles.css'
+import 'blobatar/motion.css'
 import './globals.css'
 
 const inter = Inter({
@@ -29,11 +29,12 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+import type { Metadata } from 'next'
+
 export const metadata: Metadata = {
   title: 'Chess Engine',
   description: 'A simple JS-based chess engine',
   manifest: '/manifest.json',
-  themeColor: '#176E55',
 }
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
