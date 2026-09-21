@@ -9,7 +9,14 @@ import {
 } from '@/components/ui/dialog'
 import { useChessStore } from '@/store/useChessStore'
 import { capitalize } from 'lodash'
-import { Award, Frown, LogOut, RotateCcw, Settings2, Trophy } from 'lucide-react'
+import {
+  Award,
+  Frown,
+  LogOut,
+  RotateCcw,
+  Settings2,
+  Trophy,
+} from 'lucide-react'
 
 export function GameOverDialog() {
   const gameResult = useChessStore((state) => state.gameResult)

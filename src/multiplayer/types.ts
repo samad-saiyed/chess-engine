@@ -56,6 +56,20 @@ export type PeerMessage =
       type: 'REMATCH_ACCEPT'
     }
   | {
+      type: 'SYNC_STATE'
+      payload: {
+        moveHistory: Move[]
+        whiteTimeMs: number
+        blackTimeMs: number
+      }
+    }
+  | {
+      type: 'RECONNECT'
+      payload: {
+        playerName: string
+      }
+    }
+  | {
       type: 'PING'
     }
   | {

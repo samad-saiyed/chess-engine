@@ -188,7 +188,7 @@ export function ChessBoard() {
       />
 
       {/* Chessboard with SVG Overlay */}
-      <div className='relative w-full overflow-hidden rounded-lg border border-white/10 shadow-2xl'>
+      <div className='relative w-full overflow-hidden rounded-none border-y border-white/10 shadow-2xl sm:rounded-2xl sm:border sm:border-white/10'>
         {/* SVG Arrow Annotations Layer */}
         <BoardAnnotations
           arrows={arrows}

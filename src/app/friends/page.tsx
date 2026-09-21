@@ -12,10 +12,15 @@ import { gooeyToast } from 'goey-toast'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef } from 'react'
 
+import { sessionMemory } from '@/multiplayer/sessionMemory'
+
 function FriendsAutoJoinHandler() {
   const searchParams = useSearchParams()
   const initMultiplayerSession = useChessStore(
     (state) => state.initMultiplayerSession,
+  )
+  const restoreMultiplayerSession = useChessStore(
+    (state) => state.restoreMultiplayerSession,
   )
   const playerName = useChessStore((state) => state.playerName)
   const setGameMode = useChessStore((state) => state.setGameMode)
@@ -27,12 +32,92 @@ function FriendsAutoJoinHandler() {
   }, [setGameMode])
 
   useEffect(() => {
+    if (hasProcessedRef.current) return
+    hasProcessedRef.current = true
+
     const roomId = searchParams.get('room')
     const joinData = searchParams.get('join')
 
-    if ((!roomId && !joinData) || hasProcessedRef.current) return
-    hasProcessedRef.current = true
+    // 1. Accidental Browser Refresh Recovery
+    if (!roomId && !joinData) {
+      const activeSession = sessionMemory.getSession()
+      if (activeSession && activeSession.roomId) {
+        restoreMultiplayerSession(activeSession)
+        gooeyToast.info('Game Restored', {
+          description: `Reconnecting to match with ${activeSession.opponentName}...`,
+        })
 
+        const reconnectSession = async () => {
+          try {
+            if (activeSession.peerRole === 'host') {
+              const newOffer = await webrtcManager.createOffer()
+              await roomSignaling.postOffer(
+                activeSession.roomId,
+                newOffer,
+                activeSession.playerColor,
+                activeSession.timeControl?.id,
+                playerName,
+                true,
+              )
+
+              roomSignaling.initBroadcast(activeSession.roomId, async (msg) => {
+                if (msg.type === 'ANSWER') {
+                  await webrtcManager.applyAnswer(msg.payload)
+                }
+              })
+
+              roomSignaling.startPollingAnswer(
+                activeSession.roomId,
+                async (ans) => {
+                  await webrtcManager.applyAnswer(ans)
+                },
+              )
+
+              const unsub = webrtcManager.onStateChange((st) => {
+                if (st === 'connected') {
+                  roomSignaling.stopPolling()
+                  webrtcManager.sendMessage({
+                    type: 'RECONNECT',
+                    payload: { playerName },
+                  })
+                  unsub()
+                }
+              })
+            } else {
+              // Joiner polls for host's reconnected offer
+              roomSignaling.startPollingOffer(
+                activeSession.roomId,
+                async (data) => {
+                  if (data.offer) {
+                    const answer = await webrtcManager.acceptOffer(data.offer)
+                    await roomSignaling.postAnswer(activeSession.roomId, answer)
+                  }
+                },
+              )
+
+              const unsub = webrtcManager.onStateChange((st) => {
+                if (st === 'connected') {
+                  roomSignaling.stopPolling()
+                  webrtcManager.sendMessage({
+                    type: 'RECONNECT',
+                    payload: { playerName },
+                  })
+                  unsub()
+                }
+              })
+            }
+          } catch (err) {
+            console.warn('Auto-reconnect error:', err)
+          }
+        }
+
+        reconnectSession()
+        return
+      }
+      return
+    }
+
+    // 2. Joining room via URL params
     const connectToHost = async () => {
       try {
         let offerToAccept = joinData || ''
@@ -78,7 +163,13 @@ function FriendsAutoJoinHandler() {
                 joinerName: playerName,
               },
             })
-            initMultiplayerSession('joiner', myColor, opponentHostName, tc)
+            initMultiplayerSession(
+              'joiner',
+              myColor,
+              opponentHostName,
+              tc,
+              roomId || undefined,
+            )
             gooeyToast.success('Connected to Host!', {
               description: `Game started against ${opponentHostName}`,
             })
@@ -94,7 +185,12 @@ function FriendsAutoJoinHandler() {
     }
 
     connectToHost()
-  }, [searchParams, playerName, initMultiplayerSession])
+  }, [
+    searchParams,
+    playerName,
+    initMultiplayerSession,
+    restoreMultiplayerSession,
+  ])
 
   return null
 }
@@ -106,12 +202,12 @@ export default function FriendsPage() {
         <FriendsAutoJoinHandler />
       </Suspense>
 
-      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center gap-7 p-2 max-lg:flex-col sm:p-8 lg:gap-12'>
-        <div className='flex flex-1 items-center justify-center'>
+      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center gap-7 px-0 py-2 max-lg:flex-col sm:p-8 lg:gap-12'>
+        <div className='flex w-full flex-1 items-center justify-center'>
           <ChessBoard />
         </div>
 
-        <div className='flex w-full max-w-md flex-1 items-center justify-center'>
+        <div className='flex w-full max-w-md flex-1 items-center justify-center px-3 sm:px-0'>
           <FriendsGameControls />
         </div>
       </div>

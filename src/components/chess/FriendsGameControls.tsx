@@ -92,8 +92,13 @@ export function FriendsGameControls() {
         const myColor: Color = hostColor === 'white' ? 'black' : 'white'
         const tc = TIME_CONTROLS.find((t) => t.id === timeControlId) || null
 
-        // Joiner initializes session with the opposite color
-        initMultiplayerSession('joiner', myColor, hostName, tc)
+        initMultiplayerSession(
+          'joiner',
+          myColor,
+          hostName,
+          tc,
+          useChessStore.getState().activeRoomId || undefined,
+        )
 
         // Respond with joiner's name
         webrtcManager.sendMessage({
@@ -109,6 +114,21 @@ export function FriendsGameControls() {
         useChessStore.setState({ opponentName: msg.payload.joinerName })
         gooeyToast.success('Friend Joined!', {
           description: `Playing against ${msg.payload.joinerName}`,
+        })
+      } else if (msg.type === 'SYNC_STATE') {
+        const { moveHistory, whiteTimeMs, blackTimeMs } = msg.payload
+        useChessStore
+          .getState()
+          .syncRemoteState(moveHistory, whiteTimeMs, blackTimeMs)
+      } else if (msg.type === 'RECONNECT') {
+        const { moveHistory, whiteTimeMs, blackTimeMs } =
+          useChessStore.getState()
+        webrtcManager.sendMessage({
+          type: 'SYNC_STATE',
+          payload: { moveHistory, whiteTimeMs, blackTimeMs },
+        })
+        gooeyToast.info('Friend Reconnected', {
+          description: `${msg.payload.playerName} returned to the match.`,
         })
       } else if (msg.type === 'MOVE') {
         receiveRemoteMove(msg.payload.move)
@@ -199,6 +219,7 @@ export function FriendsGameControls() {
         assignedColor,
         'Opponent',
         selectedTimeControl.initialSeconds > 0 ? selectedTimeControl : null,
+        roomId,
       )
 
       // Register offer on signaling channel & broadcast channel
@@ -308,7 +329,7 @@ export function FriendsGameControls() {
               joinerName: playerName,
             },
           })
-          initMultiplayerSession('joiner', myColor, hostName, tc)
+          initMultiplayerSession('joiner', myColor, hostName, tc, roomId)
           gooeyToast.success('Connected to Host!', {
             description: `Game started against ${hostName}`,
           })

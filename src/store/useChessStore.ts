@@ -30,8 +30,50 @@ import type { PeerConnectionState, PeerRole } from '@/multiplayer/types'
 import { webrtcManager } from '@/multiplayer/webrtc'
 import { gooeyToast } from 'goey-toast'
 import { create } from 'zustand'
-
+import {
+  sessionMemory,
+  type StoredGameSession,
+} from '@/multiplayer/sessionMemory'
 import type { TimeControl } from '@/chess/timer'
+
+export function reconstructBoardFromHistory(moveHistory: Move[]): {
+  board: Board
+  turn: Color
+  castlingRights: CastlingRights
+  enPassantTarget: SquareCoordinate | null
+  lastMove: { from: SquareCoordinate; to: SquareCoordinate } | null
+} {
+  let board = createInitialBoard()
+  let turn: Color = 'white'
+  let castlingRights: CastlingRights = {
+    whiteKingSide: true,
+    whiteQueenSide: true,
+    blackKingSide: true,
+    blackQueenSide: true,
+  }
+  let enPassantTarget: SquareCoordinate | null = null
+  let lastMove: { from: SquareCoordinate; to: SquareCoordinate } | null = null
+
+  for (const move of moveHistory) {
+    const { from, to, type, promotionPiece } = move
+    if (type === 'castle') {
+      board = makeCastlingMove(board, from, to)
+    } else if (type === 'en-passant') {
+      board = makeEnPassantMove(board, from, to)
+    } else if (type === 'promotion') {
+      board = makePromotionMove(board, from, to, promotionPiece || 'q')
+    } else {
+      board = makeMove(board, from, to)
+    }
+
+    castlingRights = updateCastlingRights(castlingRights, move)
+    enPassantTarget = getEnPassantTarget(board, from, to)
+    turn = turn === 'white' ? 'black' : 'white'
+    lastMove = { from, to }
+  }
+
+  return { board, turn, castlingRights, enPassantTarget, lastMove }
+}
 
 export type GameMode = 'local' | 'bot' | 'friends'
 
@@ -71,6 +113,7 @@ interface ChessStore {
   gameResult: GameResult | null
 
   // Multiplayer Peer state
+  activeRoomId: string | null
   playerName: string
   opponentName: string
   peerRole: PeerRole | null
@@ -102,6 +145,7 @@ interface ChessStore {
   triggerBotMove: () => Promise<void>
 
   // Multiplayer Actions
+  setActiveRoomId: (roomId: string | null) => void
   setPlayerName: (name: string) => void
   setPeerConnectionState: (state: PeerConnectionState) => void
   initMultiplayerSession: (
@@ -109,6 +153,13 @@ interface ChessStore {
     myColor: Color,
     opponentName: string,
     timeControl?: TimeControl | null,
+    roomId?: string,
+  ) => void
+  restoreMultiplayerSession: (session: StoredGameSession) => void
+  syncRemoteState: (
+    remoteMoveHistory: Move[],
+    remoteWhiteMs: number,
+    remoteBlackMs: number,
   ) => void
   receiveRemoteMove: (move: Move) => void
   offerDraw: () => void
@@ -116,6 +167,29 @@ interface ChessStore {
   declineDraw: () => void
   requestRematch: () => void
   acceptRematch: () => void
+}
+
+function saveFriendsSession(state: ChessStore) {
+  if (state.gameMode !== 'friends' || !state.activeRoomId || !state.peerRole) {
+    return
+  }
+  sessionMemory.saveSession({
+    roomId: state.activeRoomId,
+    peerRole: state.peerRole,
+    playerColor: state.playerColor,
+    playerName: state.playerName,
+    opponentName: state.opponentName,
+    moveHistory: state.moveHistory,
+    timeControl: state.timeControl,
+    whiteTimeMs: state.whiteTimeMs,
+    blackTimeMs: state.blackTimeMs,
+    turn: state.turn,
+    status: state.status,
+    lastMove: state.lastMove,
+    castlingRights: state.castlingRights,
+    enPassantTarget: state.enPassantTarget,
+    gameResult: state.gameResult,
+  })
 }
 
 export const useChessStore = create<ChessStore>((set, get) => ({
@@ -149,6 +223,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
   lastBotEvaluation: null,
   gameResult: null,
 
+  activeRoomId: null,
   playerName: getStoredPlayerName(),
   opponentName: 'Opponent',
   peerRole: null,
@@ -226,6 +301,8 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     }
   },
 
+  setActiveRoomId: (roomId) => set({ activeRoomId: roomId }),
+
   setPlayerName: (name) => {
     savePlayerName(name)
     set({ playerName: name })
@@ -234,8 +311,10 @@ export const useChessStore = create<ChessStore>((set, get) => ({
   setPeerConnectionState: (state) => set({ peerConnectionState: state }),
 
   exitToSetup: () => {
+    sessionMemory.clearSession()
     webrtcManager.close()
     set({
+      activeRoomId: null,
       board: createInitialBoard(),
       turn: 'white',
       status: 'playing',
@@ -326,6 +405,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       isClockActive: false,
       gameResult: { winner, reason: 'resignation' },
     })
+    saveFriendsSession(get())
   },
 
   startBotGame: (colorChoice, difficulty, tc = null) => {
@@ -377,14 +457,16 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     }
   },
 
-  initMultiplayerSession: (role, myColor, opponentName, tc = null) => {
+  initMultiplayerSession: (role, myColor, opponentName, tc = null, roomId) => {
     playSound('game-start')
     const activeTC = tc !== undefined ? tc : get().timeControl
     const initialMs = activeTC ? activeTC.initialSeconds * 1000 : 0
     const hasActiveClock = Boolean(activeTC && activeTC.initialSeconds > 0)
+    const activeRoom = roomId || get().activeRoomId
 
     set({
       gameMode: 'friends',
+      activeRoomId: activeRoom,
       peerRole: role,
       playerColor: myColor,
       opponentName: opponentName || 'Friend',
@@ -413,6 +495,97 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       isDrawOfferedByOpponent: false,
       isRematchRequested: false,
     })
+
+    saveFriendsSession(get())
+  },
+
+  restoreMultiplayerSession: (session: StoredGameSession) => {
+    const { board, turn, castlingRights, enPassantTarget, lastMove } =
+      reconstructBoardFromHistory(session.moveHistory)
+
+    const status = getGameStatus(board, turn, castlingRights, enPassantTarget)
+
+    const hasClock = Boolean(
+      session.timeControl &&
+      session.timeControl.initialSeconds > 0 &&
+      status !== 'checkmate' &&
+      status !== 'stalemate',
+    )
+
+    set({
+      gameMode: 'friends',
+      activeRoomId: session.roomId,
+      peerRole: session.peerRole,
+      playerColor: session.playerColor,
+      playerName: session.playerName,
+      opponentName: session.opponentName,
+      timeControl: session.timeControl,
+      whiteTimeMs: session.whiteTimeMs,
+      blackTimeMs: session.blackTimeMs,
+      isClockActive: hasClock,
+      isFlipped: session.playerColor === 'black',
+      board,
+      turn,
+      status,
+      lastMove,
+      castlingRights,
+      enPassantTarget,
+      moveHistory: session.moveHistory,
+      pendingPromotion: null,
+      isMatchStarted: true,
+      gameResult: session.gameResult,
+      isDrawOfferedByOpponent: false,
+      isRematchRequested: false,
+    })
+  },
+
+  syncRemoteState: (
+    remoteMoveHistory: Move[],
+    remoteWhiteMs: number,
+    remoteBlackMs: number,
+  ) => {
+    const current = get()
+    if (remoteMoveHistory.length > current.moveHistory.length) {
+      const { board, turn, castlingRights, enPassantTarget, lastMove } =
+        reconstructBoardFromHistory(remoteMoveHistory)
+
+      const status = getGameStatus(board, turn, castlingRights, enPassantTarget)
+
+      let resultState: GameResult | null = null
+      if (status === 'checkmate') {
+        resultState = {
+          winner: turn === 'white' ? 'black' : 'white',
+          reason: 'checkmate',
+        }
+      } else if (status === 'stalemate') {
+        resultState = { winner: 'draw', reason: 'stalemate' }
+      }
+
+      const isClockActive =
+        Boolean(
+          current.timeControl && current.timeControl.initialSeconds > 0,
+        ) &&
+        status !== 'checkmate' &&
+        status !== 'stalemate'
+
+      set({
+        board,
+        turn,
+        status,
+        moveHistory: remoteMoveHistory,
+        lastMove,
+        castlingRights,
+        enPassantTarget,
+        selectedSquare: null,
+        pendingPromotion: null,
+        whiteTimeMs: remoteWhiteMs,
+        blackTimeMs: remoteBlackMs,
+        isClockActive,
+        gameResult: resultState || current.gameResult,
+      })
+
+      saveFriendsSession(get())
+    }
   },
 
   receiveRemoteMove: (move) => {
@@ -522,6 +695,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       blackTimeMs: nextBlackMs,
       isClockActive,
     })
+    saveFriendsSession(get())
   },
 
   offerDraw: () => {
@@ -539,6 +713,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       gameResult: { winner: 'draw', reason: 'stalemate' },
       isDrawOfferedByOpponent: false,
     })
+    saveFriendsSession(get())
   },
 
   declineDraw: () => {
@@ -857,6 +1032,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       enPassantTarget: nextEnPassantTarget,
       gameResult: resultState,
     })
+    saveFriendsSession(get())
 
     // If game continues in bot mode, trigger bot turn
     if (
@@ -951,6 +1127,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       enPassantTarget: null,
       gameResult: resultState,
     })
+    saveFriendsSession(get())
 
     if (
       gameMode === 'bot' &&

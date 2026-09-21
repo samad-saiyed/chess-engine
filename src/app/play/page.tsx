@@ -12,12 +12,12 @@ export const metadata: Metadata = {
 export default function PlayBotPage() {
   return (
     <DarkAuroraBackground>
-      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center gap-7 p-2 max-lg:flex-col sm:p-8 lg:gap-12'>
-        <div className='flex flex-1 items-center justify-center'>
+      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center gap-7 px-0 py-2 max-lg:flex-col sm:p-8 lg:gap-12'>
+        <div className='flex w-full flex-1 items-center justify-center'>
           <ChessBoard />
         </div>
 
-        <div className='flex w-full max-w-md flex-1 items-center justify-center'>
+        <div className='flex w-full max-w-md flex-1 items-center justify-center px-3 sm:px-0'>
           <BotGameControls />
         </div>
       </div>

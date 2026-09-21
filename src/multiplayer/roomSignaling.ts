@@ -41,6 +41,7 @@ export class RoomSignaling {
     hostColor: string,
     timeControlId?: string,
     hostName?: string,
+    resetAnswer = true,
   ): Promise<void> {
     const msg: RoomSignalMessage = {
       type: 'OFFER',
@@ -65,6 +66,7 @@ export class RoomSignaling {
           hostColor,
           timeControlId,
           hostName,
+          resetAnswer,
         }),
       })
     } catch (err) {
@@ -97,6 +99,33 @@ export class RoomSignaling {
     }
   }
 
+  public startPollingOffer(
+    room: string,
+    onOffer: (data: {
+      offer: string
+      hostColor?: string
+      timeControlId?: string
+      hostName?: string
+    }) => void,
+  ) {
+    if (this.pollInterval) clearInterval(this.pollInterval)
+
+    this.pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/signaling?room=${room}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.offer) {
+            onOffer(data)
+            this.stopPolling()
+          }
+        }
+      } catch (err) {
+        console.warn('Polling offer failed:', err)
+      }
+    }, 1200)
+  }
+
   public startPollingAnswer(room: string, onAnswer: (answer: string) => void) {
     if (this.pollInterval) clearInterval(this.pollInterval)
 
@@ -111,9 +140,7 @@ export class RoomSignaling {
           }
         }
       } catch (err) {
-        console.log('🚀 --------------------------------------------------🚀')
-        console.log('🚀 ~ RoomSignaling ~ startPollingAnswer ~ err:', err)
-        console.log('🚀 --------------------------------------------------🚀')
+        console.warn('Polling answer failed:', err)
       }
     }, 1000)
   }

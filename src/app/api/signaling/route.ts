@@ -42,7 +42,15 @@ export async function POST(request: Request) {
   cleanupOldRooms()
   try {
     const body = await request.json()
-    const { room, offer, answer, hostColor, timeControlId, hostName } = body
+    const {
+      room,
+      offer,
+      answer,
+      hostColor,
+      timeControlId,
+      hostName,
+      resetAnswer,
+    } = body
 
     if (!room) {
       return NextResponse.json({ error: 'Room ID required' }, { status: 400 })
@@ -50,7 +58,15 @@ export async function POST(request: Request) {
 
     const existing = rooms.get(room) || { createdAt: Date.now() }
 
-    if (offer) existing.offer = offer
+    if (resetAnswer) {
+      delete existing.answer
+    }
+    if (offer) {
+      existing.offer = offer
+      if (resetAnswer !== false) {
+        delete existing.answer
+      }
+    }
     if (answer) existing.answer = answer
     if (hostColor) existing.hostColor = hostColor
     if (timeControlId) existing.timeControlId = timeControlId
