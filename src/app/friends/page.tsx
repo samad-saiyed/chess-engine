@@ -106,7 +106,7 @@ export default function FriendsPage() {
         <FriendsAutoJoinHandler />
       </Suspense>
 
-      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center p-4 max-lg:flex-col sm:p-8 lg:gap-12'>
+      <div className='mx-auto flex min-h-screen max-w-7xl items-center justify-center gap-7 p-2 max-lg:flex-col sm:p-8 lg:gap-12'>
         <div className='flex flex-1 items-center justify-center'>
           <ChessBoard />
         </div>
