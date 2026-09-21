@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button'
 import { PlayerAvatar } from '@/components/ui/PlayerAvatar'
 import type { PeerMessage } from '@/multiplayer/types'
 import { webrtcManager } from '@/multiplayer/webrtc'
-import { useChessStore } from '@/store/useChessStore'
 import { roomSignaling } from '@/multiplayer/roomSignaling'
+import { playSound } from '@/lib/sounds'
+import { useChessStore } from '@/store/useChessStore'
 import { gooeyToast } from 'goey-toast'
 import { capitalize } from 'lodash'
 import {
@@ -117,13 +118,23 @@ export function FriendsGameControls() {
           description: `${opponentName} has offered a draw.`,
         })
       } else if (msg.type === 'DRAW_ACCEPT') {
-        acceptDraw()
+        playSound('game-end')
+        useChessStore.setState({
+          status: 'stalemate',
+          isClockActive: false,
+          gameResult: { winner: 'draw', reason: 'stalemate' },
+          isDrawOfferedByOpponent: false,
+        })
+        gooeyToast.success('Draw Accepted', {
+          description: 'Match ended in an agreed draw.',
+        })
       } else if (msg.type === 'DRAW_DECLINE') {
         gooeyToast.info('Draw Declined', {
           description: `${opponentName} declined the draw offer.`,
         })
       } else if (msg.type === 'RESIGN') {
         const winner: Color = playerColor
+        playSound('game-end')
         useChessStore.setState({
           status: 'checkmate',
           isClockActive: false,
@@ -138,10 +149,17 @@ export function FriendsGameControls() {
           description: `${opponentName} wants a rematch!`,
         })
       } else if (msg.type === 'REMATCH_ACCEPT') {
+        const { playerColor, opponentName, peerRole, timeControl } =
+          useChessStore.getState()
         const nextColor: Color = playerColor === 'white' ? 'black' : 'white'
-        initMultiplayerSession('host', nextColor, opponentName)
+        initMultiplayerSession(
+          peerRole || 'joiner',
+          nextColor,
+          opponentName,
+          timeControl,
+        )
         gooeyToast.success('Rematch Started!', {
-          description: 'Colors have been swapped.',
+          description: `Playing as ${capitalize(nextColor)}.`,
         })
       }
     })

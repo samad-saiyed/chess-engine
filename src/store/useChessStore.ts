@@ -554,11 +554,16 @@ export const useChessStore = create<ChessStore>((set, get) => ({
   },
 
   acceptRematch: () => {
-    const { playerColor, opponentName, peerRole } = get()
+    const { playerColor, opponentName, peerRole, timeControl } = get()
     webrtcManager.sendMessage({ type: 'REMATCH_ACCEPT' })
     // Swap colors on rematch
     const nextColor: Color = playerColor === 'white' ? 'black' : 'white'
-    get().initMultiplayerSession(peerRole || 'host', nextColor, opponentName)
+    get().initMultiplayerSession(
+      peerRole || 'host',
+      nextColor,
+      opponentName,
+      timeControl,
+    )
   },
 
   triggerBotMove: async () => {

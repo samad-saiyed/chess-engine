@@ -9,15 +9,19 @@ import {
 } from '@/components/ui/dialog'
 import { useChessStore } from '@/store/useChessStore'
 import { capitalize } from 'lodash'
-import { Award, Frown, RotateCcw, Settings2, Trophy } from 'lucide-react'
+import { Award, Frown, LogOut, RotateCcw, Settings2, Trophy } from 'lucide-react'
 
 export function GameOverDialog() {
   const gameResult = useChessStore((state) => state.gameResult)
   const gameMode = useChessStore((state) => state.gameMode)
   const playerColor = useChessStore((state) => state.playerColor)
+  const opponentName = useChessStore((state) => state.opponentName)
+  const isRematchRequested = useChessStore((state) => state.isRematchRequested)
   const resetGame = useChessStore((state) => state.resetGame)
   const exitToSetup = useChessStore((state) => state.exitToSetup)
   const dismissGameResult = useChessStore((state) => state.dismissGameResult)
+  const requestRematch = useChessStore((state) => state.requestRematch)
+  const acceptRematch = useChessStore((state) => state.acceptRematch)
 
   if (!gameResult) return null
 
@@ -37,14 +41,41 @@ export function GameOverDialog() {
       subtitle =
         reason === 'resignation'
           ? 'Opponent resigned.'
-          : 'You won against the Computer by checkmate!'
+          : reason === 'timeout'
+            ? 'Computer ran out of time!'
+            : 'You won against the Computer by checkmate!'
       isWin = true
     } else {
       title = 'Defeat'
       subtitle =
         reason === 'resignation'
           ? 'You resigned the match.'
-          : 'The Computer won by checkmate.'
+          : reason === 'timeout'
+            ? 'You ran out of time.'
+            : 'The Computer won by checkmate.'
+      isLoss = true
+    }
+  } else if (gameMode === 'friends') {
+    if (winner === 'draw') {
+      title = 'Match Drawn'
+      subtitle = 'The game resulted in a draw (stalemate or agreed draw).'
+    } else if (winner === playerColor) {
+      title = 'Victory!'
+      subtitle =
+        reason === 'resignation'
+          ? `${opponentName} resigned the game.`
+          : reason === 'timeout'
+            ? `${opponentName} ran out of time!`
+            : `You won by checkmate against ${opponentName}!`
+      isWin = true
+    } else {
+      title = 'Defeat'
+      subtitle =
+        reason === 'resignation'
+          ? 'You resigned the match.'
+          : reason === 'timeout'
+            ? 'You ran out of time.'
+            : `${opponentName} won by checkmate.`
       isLoss = true
     }
   } else {
@@ -60,6 +91,20 @@ export function GameOverDialog() {
           : `Checkmate against ${winner === 'white' ? 'Black' : 'White'}.`
       isWin = true
     }
+  }
+
+  const handleFriendsRematch = () => {
+    if (isRematchRequested) {
+      acceptRematch()
+    } else {
+      requestRematch()
+    }
+    dismissGameResult()
+  }
+
+  const handlePlayAgain = () => {
+    dismissGameResult()
+    resetGame()
   }
 
   return (
@@ -101,21 +146,47 @@ export function GameOverDialog() {
         </DialogHeader>
 
         <div className='mt-6 flex flex-col gap-2.5'>
-          <Button
-            onClick={resetGame}
-            variant='default'
-            className='h-12 w-full rounded-xl text-sm font-semibold shadow-md'>
-            <RotateCcw className='mr-2 h-4 w-4' />
-            Play Again
-          </Button>
+          {gameMode === 'friends' ? (
+            <Button
+              onClick={handleFriendsRematch}
+              variant='default'
+              className='h-12 w-full rounded-xl text-sm font-semibold shadow-md'>
+              <RotateCcw className='mr-2 h-4 w-4' />
+              {isRematchRequested ? 'Accept Rematch' : 'Request Rematch'}
+            </Button>
+          ) : (
+            <Button
+              onClick={handlePlayAgain}
+              variant='default'
+              className='h-12 w-full rounded-xl text-sm font-semibold shadow-md'>
+              <RotateCcw className='mr-2 h-4 w-4' />
+              Play Again
+            </Button>
+          )}
 
           {gameMode === 'bot' && (
             <Button
-              onClick={exitToSetup}
+              onClick={() => {
+                dismissGameResult()
+                exitToSetup()
+              }}
               variant='secondary'
               className='h-11 w-full rounded-xl border border-white/10 text-sm font-medium'>
               <Settings2 className='mr-2 h-4 w-4' />
               Change Setup
+            </Button>
+          )}
+
+          {gameMode === 'friends' && (
+            <Button
+              onClick={() => {
+                dismissGameResult()
+                exitToSetup()
+              }}
+              variant='secondary'
+              className='h-11 w-full rounded-xl border border-white/10 text-sm font-medium'>
+              <LogOut className='mr-2 h-4 w-4' />
+              Leave Room
             </Button>
           )}
 

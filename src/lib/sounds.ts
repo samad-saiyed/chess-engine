@@ -27,22 +27,30 @@ const SOUND_FILES: Record<SoundType, string> = {
 
 // Audio cache to reuse Audio elements
 const audioCache: Partial<Record<SoundType, HTMLAudioElement>> = {}
+const lastPlayedTimes: Partial<Record<SoundType, number>> = {}
 
 export function playSound(type: SoundType): void {
   if (typeof window === 'undefined') return
+
+  // Prevent multiple duplicate audio calls firing within a short window
+  const now = Date.now()
+  if (lastPlayedTimes[type] && now - lastPlayedTimes[type]! < 500) {
+    return
+  }
+  lastPlayedTimes[type] = now
 
   try {
     let audio = audioCache[type]
     if (!audio) {
       audio = new Audio(SOUND_FILES[type])
       audio.preload = 'auto'
+      audio.loop = false
       audioCache[type] = audio
     }
 
-    // Reset timestamp to allow rapid replay
+    // Reset timestamp to allow replay
     audio.currentTime = 0
     audio.play().catch((err) => {
-      // Browsers may block autoplay until user has interacted with the page
       console.debug(`Audio play prevented for ${type}:`, err)
     })
   } catch (err) {
