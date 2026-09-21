@@ -173,7 +173,7 @@ export function ChessBoard() {
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className='flex w-full max-w-160 flex-col gap-2 select-none'>
+      className='flex w-full lg:max-w-160 flex-col gap-2 select-none'>
       {/* Top Player Bar */}
       <PlayerBar
         name={topName}

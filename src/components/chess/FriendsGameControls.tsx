@@ -9,6 +9,7 @@ import { PlayerAvatar } from '@/components/ui/PlayerAvatar'
 import type { PeerMessage } from '@/multiplayer/types'
 import { webrtcManager } from '@/multiplayer/webrtc'
 import { useChessStore } from '@/store/useChessStore'
+import { roomSignaling } from '@/multiplayer/roomSignaling'
 import { gooeyToast } from 'goey-toast'
 import { capitalize } from 'lodash'
 import {
@@ -85,13 +86,28 @@ export function FriendsGameControls() {
     })
 
     const unsubMsg = webrtcManager.onMessage((msg: PeerMessage) => {
-      if (msg.type === 'HANDSHAKE') {
-        const { name, hostColor, timeControlId } = msg.payload
+      if (msg.type === 'HOST_HELLO') {
+        const { hostName, hostColor, timeControlId } = msg.payload
         const myColor: Color = hostColor === 'white' ? 'black' : 'white'
         const tc = TIME_CONTROLS.find((t) => t.id === timeControlId) || null
-        initMultiplayerSession('joiner', myColor, name, tc)
+
+        // Joiner initializes session with the opposite color
+        initMultiplayerSession('joiner', myColor, hostName, tc)
+
+        // Respond with joiner's name
+        webrtcManager.sendMessage({
+          type: 'JOIN_HELLO',
+          payload: { joinerName: playerName },
+        })
+
         gooeyToast.success('Connected!', {
-          description: `Playing against ${name}`,
+          description: `Playing as ${capitalize(myColor)} against ${hostName}`,
+        })
+      } else if (msg.type === 'JOIN_HELLO') {
+        // Host learns joiner's name
+        useChessStore.setState({ opponentName: msg.payload.joinerName })
+        gooeyToast.success('Friend Joined!', {
+          description: `Playing against ${msg.payload.joinerName}`,
         })
       } else if (msg.type === 'MOVE') {
         receiveRemoteMove(msg.payload.move)
@@ -141,14 +157,16 @@ export function FriendsGameControls() {
     acceptDraw,
     opponentName,
     playerColor,
+    playerName,
   ])
 
   // Host creates game offer
   const handleHostGame = async () => {
     try {
       setIsGeneratingOffer(true)
+      const roomId = Math.random().toString(36).substring(2, 8)
       const encodedOffer = await webrtcManager.createOffer()
-      setOfferCode(encodedOffer)
+      setOfferCode(roomId)
 
       let assignedColor: Color
       if (selectedColor === 'random') {
@@ -157,29 +175,51 @@ export function FriendsGameControls() {
         assignedColor = selectedColor
       }
 
-      // Construct direct invite URL
+      // Pre-initialize Host game state immediately
+      initMultiplayerSession(
+        'host',
+        assignedColor,
+        'Opponent',
+        selectedTimeControl.initialSeconds > 0 ? selectedTimeControl : null,
+      )
+
+      // Register offer on signaling channel & broadcast channel
+      await roomSignaling.postOffer(
+        roomId,
+        encodedOffer,
+        assignedColor,
+        selectedTimeControl.id,
+        playerName,
+      )
+
+      // Listen for answer from peer via broadcast channel and polling
+      roomSignaling.initBroadcast(roomId, async (msg) => {
+        if (msg.type === 'ANSWER') {
+          await webrtcManager.applyAnswer(msg.payload)
+        }
+      })
+      roomSignaling.startPollingAnswer(roomId, async (answer) => {
+        await webrtcManager.applyAnswer(answer)
+      })
+
+      // Construct direct short invite URL
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
-      const url = `${origin}/friends?join=${encodedOffer}&color=${assignedColor}&tc=${selectedTimeControl.id}&host=${encodeURIComponent(playerName)}`
+      const url = `${origin}/friends?room=${roomId}`
       setInviteUrl(url)
       setShareModalOpen(true)
 
       // Listen for peer connection open to send handshake
       const unsub = webrtcManager.onStateChange((st) => {
         if (st === 'connected') {
+          roomSignaling.stopPolling()
           webrtcManager.sendMessage({
-            type: 'HANDSHAKE',
+            type: 'HOST_HELLO',
             payload: {
-              name: playerName,
+              hostName: playerName,
               hostColor: assignedColor,
               timeControlId: selectedTimeControl.id,
             },
           })
-          initMultiplayerSession(
-            'host',
-            assignedColor,
-            'Opponent',
-            selectedTimeControl.initialSeconds > 0 ? selectedTimeControl : null,
-          )
           unsub()
         }
       })
@@ -199,36 +239,68 @@ export function FriendsGameControls() {
 
     try {
       setIsConnecting(true)
-      let offerStr = manualCodeInput.trim()
+      const input = manualCodeInput.trim()
 
-      // If user pasted full URL, extract join param
-      if (offerStr.includes('join=')) {
-        const parsed = new URL(offerStr)
-        offerStr = parsed.searchParams.get('join') || ''
+      let roomId = ''
+      let directOffer = ''
+
+      if (input.includes('room=')) {
+        const parsed = new URL(input)
+        roomId = parsed.searchParams.get('room') || ''
+      } else if (input.includes('join=')) {
+        const parsed = new URL(input)
+        directOffer = parsed.searchParams.get('join') || ''
+      } else if (input.length <= 10) {
+        roomId = input
+      } else {
+        directOffer = input
       }
 
-      // Listen for open state to send handshake
+      let offerToAccept = directOffer
+      let hostColor: Color = 'white'
+      let tcId: string | undefined
+      let hostName = 'Host'
+
+      if (roomId) {
+        const data = await roomSignaling.fetchRoomOffer(roomId)
+        if (!data || !data.offer) {
+          throw new Error('Room not found or expired')
+        }
+        offerToAccept = data.offer
+        if (data.hostColor === 'black' || data.hostColor === 'white') {
+          hostColor = data.hostColor as Color
+        }
+        tcId = data.timeControlId
+        if (data.hostName) hostName = data.hostName
+      }
+
+      const answer = await webrtcManager.acceptOffer(offerToAccept)
+      if (roomId) {
+        await roomSignaling.postAnswer(roomId, answer)
+      }
+
+      const myColor: Color = hostColor === 'white' ? 'black' : 'white'
+      const tc = TIME_CONTROLS.find((t) => t.id === tcId) || null
+
       const unsub = webrtcManager.onStateChange((st) => {
         if (st === 'connected') {
           webrtcManager.sendMessage({
-            type: 'HANDSHAKE',
+            type: 'JOIN_HELLO',
             payload: {
-              name: playerName,
-              hostColor: 'white', // Placeholder, updated on incoming host handshake
+              joinerName: playerName,
             },
+          })
+          initMultiplayerSession('joiner', myColor, hostName, tc)
+          gooeyToast.success('Connected to Host!', {
+            description: `Game started against ${hostName}`,
           })
           unsub()
         }
       })
-
-      // If needed, copy answer or alert user
-      gooeyToast.success('Connected to host!', {
-        description: 'Starting peer match...',
-      })
     } catch (err) {
       console.error('Failed to join game:', err)
       gooeyToast.error('Join Error', {
-        description: 'Could not connect with the provided link/code.',
+        description: 'Could not connect with the provided room/code.',
       })
     } finally {
       setIsConnecting(false)

@@ -266,6 +266,9 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     const { playerColor, gameMode, timeControl } = get()
     playSound('game-start')
     const initialMs = timeControl ? timeControl.initialSeconds * 1000 : 0
+    const hasActiveClock = Boolean(
+      timeControl && timeControl.initialSeconds > 0,
+    )
     set({
       board: createInitialBoard(),
       turn: 'white',
@@ -290,7 +293,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       isRematchRequested: false,
       whiteTimeMs: initialMs,
       blackTimeMs: initialMs,
-      isClockActive: false,
+      isClockActive: hasActiveClock,
     })
 
     // If bot plays White, trigger opening move
@@ -335,6 +338,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
 
     const activeTC = tc !== undefined ? tc : get().timeControl
     const initialMs = activeTC ? activeTC.initialSeconds * 1000 : 0
+    const hasActiveClock = Boolean(activeTC && activeTC.initialSeconds > 0)
 
     playSound('game-start')
     set({
@@ -344,7 +348,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       timeControl: activeTC,
       whiteTimeMs: initialMs,
       blackTimeMs: initialMs,
-      isClockActive: false,
+      isClockActive: hasActiveClock,
       isFlipped: assignedColor === 'black',
       board: createInitialBoard(),
       turn: 'white',
@@ -365,11 +369,19 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       lastBotEvaluation: null,
       gameResult: null,
     })
+
+    if (assignedColor === 'black') {
+      setTimeout(() => {
+        get().triggerBotMove()
+      }, 400)
+    }
   },
+
   initMultiplayerSession: (role, myColor, opponentName, tc = null) => {
     playSound('game-start')
     const activeTC = tc !== undefined ? tc : get().timeControl
     const initialMs = activeTC ? activeTC.initialSeconds * 1000 : 0
+    const hasActiveClock = Boolean(activeTC && activeTC.initialSeconds > 0)
 
     set({
       gameMode: 'friends',
@@ -379,7 +391,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       timeControl: activeTC,
       whiteTimeMs: initialMs,
       blackTimeMs: initialMs,
-      isClockActive: false,
+      isClockActive: hasActiveClock,
       isFlipped: myColor === 'black',
       board: createInitialBoard(),
       turn: 'white',

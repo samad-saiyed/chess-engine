@@ -5,6 +5,7 @@ import { FriendsGameControls } from '@/components/chess/FriendsGameControls'
 import { DarkAuroraBackground } from '@/components/ui/dark-aurora-background'
 import { TIME_CONTROLS } from '@/chess/timer'
 import type { Color } from '@/chess/types'
+import { roomSignaling } from '@/multiplayer/roomSignaling'
 import { webrtcManager } from '@/multiplayer/webrtc'
 import { useChessStore } from '@/store/useChessStore'
 import { gooeyToast } from 'goey-toast'
@@ -26,37 +27,55 @@ function FriendsAutoJoinHandler() {
   }, [setGameMode])
 
   useEffect(() => {
+    const roomId = searchParams.get('room')
     const joinData = searchParams.get('join')
-    const hostColorParam = searchParams.get('color') as Color | null
-    const tcParam = searchParams.get('tc')
-    const hostNameParam = searchParams.get('host')
 
-    if (!joinData || hasProcessedRef.current) return
+    if ((!roomId && !joinData) || hasProcessedRef.current) return
     hasProcessedRef.current = true
-
-    const hostColor: Color = hostColorParam === 'black' ? 'black' : 'white'
-    const myColor: Color = hostColor === 'white' ? 'black' : 'white'
-    const tc = TIME_CONTROLS.find((t) => t.id === tcParam) || null
-    const opponentHostName = hostNameParam
-      ? decodeURIComponent(hostNameParam)
-      : 'Host'
-
-    gooeyToast.info('Connecting...', {
-      description: `Joining match hosted by ${opponentHostName}`,
-    })
 
     const connectToHost = async () => {
       try {
-        await webrtcManager.acceptOffer(joinData)
+        let offerToAccept = joinData || ''
+        let hostColor: Color = (searchParams.get('color') as Color) || 'white'
+        let tcParam = searchParams.get('tc')
+        let opponentHostName = searchParams.get('host')
+          ? decodeURIComponent(searchParams.get('host')!)
+          : 'Host'
+
+        if (roomId) {
+          const roomData = await roomSignaling.fetchRoomOffer(roomId)
+          if (!roomData || !roomData.offer) {
+            throw new Error('Room not found or expired')
+          }
+          offerToAccept = roomData.offer
+          if (
+            roomData.hostColor === 'black' ||
+            roomData.hostColor === 'white'
+          ) {
+            hostColor = roomData.hostColor as Color
+          }
+          tcParam = roomData.timeControlId || tcParam
+          if (roomData.hostName) opponentHostName = roomData.hostName
+        }
+
+        const myColor: Color = hostColor === 'white' ? 'black' : 'white'
+        const tc = TIME_CONTROLS.find((t) => t.id === tcParam) || null
+
+        gooeyToast.info('Connecting...', {
+          description: `Joining match hosted by ${opponentHostName}`,
+        })
+
+        const answer = await webrtcManager.acceptOffer(offerToAccept)
+        if (roomId) {
+          await roomSignaling.postAnswer(roomId, answer)
+        }
 
         const unsub = webrtcManager.onStateChange((st) => {
           if (st === 'connected') {
             webrtcManager.sendMessage({
-              type: 'HANDSHAKE',
+              type: 'JOIN_HELLO',
               payload: {
-                name: playerName,
-                hostColor,
-                timeControlId: tcParam || undefined,
+                joinerName: playerName,
               },
             })
             initMultiplayerSession('joiner', myColor, opponentHostName, tc)
@@ -69,7 +88,7 @@ function FriendsAutoJoinHandler() {
       } catch (err) {
         console.error('Failed to auto-join room:', err)
         gooeyToast.error('Connection Failed', {
-          description: 'The invite link may have expired or is invalid.',
+          description: 'The room link may have expired or is invalid.',
         })
       }
     }

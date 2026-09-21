@@ -18,11 +18,17 @@ export interface PlayerProfile {
 
 export type PeerMessage =
   | {
-      type: 'HANDSHAKE'
+      type: 'HOST_HELLO'
       payload: {
-        name: string
+        hostName: string
         hostColor: Color
         timeControlId?: string
+      }
+    }
+  | {
+      type: 'JOIN_HELLO'
+      payload: {
+        joinerName: string
       }
     }
   | {

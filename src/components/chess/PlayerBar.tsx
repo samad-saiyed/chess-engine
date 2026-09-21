@@ -3,6 +3,7 @@
 import type { Color, PieceType } from '@/chess/types'
 import { formatTime } from '@/chess/timer'
 import { PlayerAvatar } from '@/components/ui/PlayerAvatar'
+import { useChessStore } from '@/store/useChessStore'
 import Image from 'next/image'
 
 interface PlayerBarProps {
@@ -24,6 +25,8 @@ export function PlayerBar({
   isThinking,
   timeMs,
 }: PlayerBarProps) {
+  const timeControl = useChessStore((state) => state.timeControl)
+
   // Captured pieces are the OPPONENT's pieces that this player took
   const capturedColor: Color = color === 'white' ? 'black' : 'white'
 
@@ -33,7 +36,10 @@ export function PlayerBar({
     (a, b) => pieceOrder.indexOf(a) - pieceOrder.indexOf(b),
   )
 
-  const hasClock = typeof timeMs === 'number' && timeMs > 0
+  const hasClock =
+    typeof timeMs === 'number' &&
+    timeMs >= 0 &&
+    Boolean(timeControl && timeControl.initialSeconds > 0)
   const isLowTime = hasClock && timeMs < 20000
 
   return (
