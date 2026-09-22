@@ -35,6 +35,17 @@ export const metadata: Metadata = {
   title: 'Chess Engine',
   description: 'A simple JS-based chess engine',
   manifest: '/manifest.json',
+  openGraph: {
+    title: 'Chess Engine',
+    description: 'A simple JS-based chess engine',
+    images: '/og.png',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Chess Engine',
+    description: 'A simple JS-based chess engine',
+    images: '/og.png',
+  },
 }
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
